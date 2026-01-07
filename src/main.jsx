@@ -75,11 +75,11 @@ const FACTORS = [
 
 // --- GUIAS DE NIVEL ---
 const LEVEL_GUIDE = [
-  { val: 0, label: "Inexistencia", color: "bg-red-50 text-red-600", desc: "No se cuenta con políticas ni evidencias documentadas." },
-  { val: 1, label: "Existencia", color: "bg-orange-50 text-orange-600", desc: "Existe el documento oficial pero no hay implementación clara." },
-  { val: 2, label: "Despliegue", color: "bg-yellow-50 text-yellow-700", desc: "Se aplica sistemáticamente en el programa." },
-  { val: 3, label: "Impacto", color: "bg-green-50 text-green-700", desc: "Resultados medibles y positivos en la comunidad." },
-  { val: 4, label: "Mejora Continua", color: "bg-blue-50 text-blue-700", desc: "Optimización constante basada en datos y referente externo." }
+  { val: 0, label: "Inexistencia", color: "bg-red-50 text-red-600", desc: "Sin políticas ni evidencias." },
+  { val: 1, label: "Existencia", color: "bg-orange-50 text-orange-600", desc: "Documento oficial sin despliegue." },
+  { val: 2, label: "Despliegue", color: "bg-yellow-50 text-yellow-700", desc: "Se aplica sistemáticamente." },
+  { val: 3, label: "Impacto", color: "bg-green-50 text-green-700", desc: "Resultados medibles positivos." },
+  { val: 4, label: "Mejora Continua", color: "bg-blue-50 text-blue-700", desc: "Optimización constante con datos." }
 ];
 
 function App() {
@@ -87,31 +87,29 @@ function App() {
   const [activeFactorIndex, setActiveFactorIndex] = useState(0);
   const [activeCharIndex, setActiveCharIndex] = useState(0);
   
-  // Estados de datos
   const [assessments, setAssessments] = useState({});
-  const [factorWeights, setFactorWeights] = useState({}); // Nuevo: Ponderaciones
+  const [factorWeights, setFactorWeights] = useState({});
   const [programConfig, setProgramConfig] = useState({ name: "", rootFolder: "" });
 
-  // Persistencia de datos
   useEffect(() => {
-    const d = localStorage.getItem('maac_v4_data');
-    const c = localStorage.getItem('maac_v4_conf');
-    const w = localStorage.getItem('maac_v4_weights');
+    const d = localStorage.getItem('maac_final_data');
+    const c = localStorage.getItem('maac_final_conf');
+    const w = localStorage.getItem('maac_final_weights');
     if (d) setAssessments(JSON.parse(d));
     if (c) setProgramConfig(JSON.parse(c));
     if (w) setFactorWeights(JSON.parse(w));
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('maac_v4_data', JSON.stringify(assessments));
-    localStorage.setItem('maac_v4_conf', JSON.stringify(programConfig));
-    localStorage.setItem('maac_v4_weights', JSON.stringify(factorWeights));
+    localStorage.setItem('maac_final_data', JSON.stringify(assessments));
+    localStorage.setItem('maac_final_conf', JSON.stringify(programConfig));
+    localStorage.setItem('maac_final_weights', JSON.stringify(factorWeights));
   }, [assessments, programConfig, factorWeights]);
 
-  const activeF = FACTORS[activeFactorIndex], activeC = activeF.characteristics[activeCharIndex];
+  const activeF = FACTORS[activeFactorIndex];
+  const activeC = activeF.characteristics[activeCharIndex];
   const current = assessments[activeC.id] || { level: 0, observations: "", evidenceLink: "" };
 
-  // Cálculo de suma de pesos para validación
   const totalWeight = useMemo(() => {
     return Object.values(factorWeights).reduce((acc, curr) => acc + (Number(curr) || 0), 0);
   }, [factorWeights]);
@@ -122,9 +120,136 @@ function App() {
       setProgramConfig({name:"", rootFolder:""});
       setFactorWeights({});
       localStorage.clear();
+      window.location.reload();
     }
   };
 
   const handleExport = () => {
     let report = `REPORTE MAAC - ${programConfig.name || "PROGRAMA NO DEFINIDO"}\n`;
-    report += `Link Raíz: ${programConfig
+    report += `Ponderación Total: ${totalWeight}%\n\n`;
+    FACTORS.forEach(f => {
+      const p = factorWeights[f.id] || 0;
+      report += `FACTOR ${f.id}: ${f.title} (${p}%)\n`;
+      f.characteristics.forEach(c => {
+        const a = assessments[c.id];
+        if (a) report += ` - ${c.title}: Nivel ${a.level}\n`;
+      });
+      report += `\n`;
+    });
+    const blob = new Blob([report], { type: 'text/plain' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Reporte_MAAC.txt`;
+    link.click();
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
+      <aside className="w-80 bg-slate-900 text-white flex flex-col p-6 space-y-4 shadow-xl">
+        <div className="py-4 border-b border-slate-800">
+          <h1 className="text-2xl font-black text-blue-500 italic">AUTO-MAAC</h1>
+        </div>
+        <nav className="flex-1 overflow-y-auto space-y-1">
+          <button onClick={()=>setView('dashboard')} className={`w-full p-4 rounded-xl flex items-center font-bold text-sm ${view === 'dashboard' ? 'bg-blue-600' : 'text-slate-400 hover:bg-slate-800'}`}>
+            <BarChart2 className="mr-3" size={18}/> Ponderación
+          </button>
+          <div className="h-px bg-slate-800 my-4" />
+          {FACTORS.map((f, i) => (
+            <button key={f.id} onClick={()=>{setActiveFactorIndex(i); setActiveCharIndex(0); setView('assessment');}} className={`w-full text-left p-3 rounded-xl text-[10px] font-black tracking-widest ${activeFactorIndex === i && view === 'assessment' ? 'bg-slate-800 text-blue-400 border-r-4 border-blue-500' : 'text-slate-500 hover:text-white'}`}>
+              FACTOR {f.id}
+            </button>
+          ))}
+        </nav>
+        <button onClick={handleReset} className="p-4 text-red-500 font-bold text-[10px] uppercase flex items-center justify-center hover:bg-red-500/10 rounded-xl">
+          <RotateCcw size={14} className="mr-2"/> Reiniciar
+        </button>
+      </aside>
+
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {view === 'assessment' ? (
+          <>
+            <header className="p-10 bg-white border-b flex justify-between items-end">
+              <div className="max-w-xl">
+                <span className="text-blue-600 font-black text-xs uppercase tracking-widest block mb-2">Factor {activeF.id} • {activeF.title}</span>
+                <h2 className="text-3xl font-black text-slate-800 leading-tight">{activeC.title}</h2>
+                <p className="text-slate-400 text-xs mt-2">{activeC.desc}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-5xl font-black text-blue-600">{current.level*25}%</span>
+                <p className="text-[10px] font-black text-slate-300 uppercase mt-2">Peso Factor: {factorWeights[activeF.id] || 0}%</p>
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-10 bg-slate-50">
+              <div className="max-w-3xl mx-auto space-y-6">
+                <section className="bg-white p-6 rounded-3xl border border-slate-200">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Escala de Calidad</h3>
+                  <div className="grid grid-cols-5 gap-2">
+                    {LEVEL_GUIDE.map(g => (
+                      <button key={g.val} onClick={()=>setAssessments({...assessments, [activeC.id]: {...current, level: g.val}})} className={`p-3 rounded-xl border-2 text-left transition-all ${current.level === g.val ? 'border-blue-600 bg-blue-50' : 'border-slate-50 hover:border-slate-100'}`}>
+                        <p className={`text-[10px] font-black uppercase ${current.level === g.val ? 'text-blue-600' : 'text-slate-300'}`}>{g.label}</p>
+                        <p className="text-[8px] text-slate-400 leading-tight mt-1">{g.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                <section className="bg-white p-6 rounded-3xl border border-slate-200">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Evidencia (Link)</h3>
+                  <input type="text" className="w-full p-3 bg-slate-50 rounded-xl border-none text-blue-600 text-xs font-medium" value={current.evidenceLink} onChange={e=>setAssessments({...assessments, [activeC.id]: {...current, evidenceLink: e.target.value}})} placeholder="Link a Drive..." />
+                </section>
+                <section className="bg-white p-6 rounded-3xl border border-slate-200">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Sustentación y Hallazgos</h3>
+                  <textarea className="w-full h-48 p-4 bg-slate-50 rounded-2xl border-none text-xs font-medium text-slate-600" value={current.observations} onChange={e=>setAssessments({...assessments, [activeC.id]: {...current, observations: e.target.value}})} placeholder="Escriba aquí..." />
+                </section>
+              </div>
+            </div>
+
+            <footer className="p-6 bg-white border-t flex justify-between px-10">
+              <button onClick={()=>{ if(activeCharIndex > 0) setActiveCharIndex(activeCharIndex-1); else if(activeFactorIndex > 0) { setActiveFactorIndex(activeFactorIndex-1); setActiveCharIndex(FACTORS[activeFactorIndex-1].characteristics.length-1); }}} className="font-black text-slate-400 text-[10px] tracking-widest uppercase hover:text-slate-800 transition-colors">Anterior</button>
+              <button onClick={()=>{
+                if(activeCharIndex < activeF.characteristics.length - 1) setActiveCharIndex(activeCharIndex + 1);
+                else if(activeFactorIndex < FACTORS.length - 1) { setActiveFactorIndex(activeFactorIndex + 1); setActiveCharIndex(0); }
+                else setView('dashboard');
+              }} className="px-10 py-3 bg-blue-600 text-white font-black text-[10px] tracking-widest uppercase rounded-xl shadow-lg hover:bg-blue-700 transition-all">Siguiente</button>
+            </footer>
+          </>
+        ) : (
+          <div className="p-10 max-w-4xl mx-auto space-y-8 overflow-y-auto h-full">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-black text-slate-800 tracking-tighter">CONFIGURACIÓN Y PONDERACIÓN</h2>
+              <button onClick={handleExport} className="bg-green-600 text-white px-6 py-2 rounded-xl font-black text-[10px] tracking-widest uppercase shadow-lg hover:bg-green-700">Exportar Reporte</button>
+            </div>
+            
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 space-y-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Datos Generales</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <input type="text" className="p-3 bg-slate-50 rounded-xl outline-none border-none font-bold text-xs" placeholder="Programa" value={programConfig.name} onChange={e=>setProgramConfig({...programConfig, name:e.target.value})}/>
+                <input type="text" className="p-3 bg-slate-50 rounded-xl outline-none border-none font-bold text-xs" placeholder="Carpeta Raíz" value={programConfig.rootFolder} onChange={e=>setProgramConfig({...programConfig, rootFolder:e.target.value})}/>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pesos por Factor (%)</h3>
+                <span className={`text-[10px] font-black px-4 py-1 rounded-full ${totalWeight === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                  Suma total: {totalWeight}% / 100%
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {FACTORS.map(f => (
+                  <div key={f.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[9px] font-black uppercase text-slate-500">F{f.id}. {f.title}</span>
+                    <input type="number" className="w-14 p-1.5 rounded-lg text-center font-black text-xs bg-white border-none shadow-sm" value={factorWeights[f.id] || ""} onChange={e => setFactorWeights({...factorWeights, [f.id]: e.target.value})} placeholder="0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
